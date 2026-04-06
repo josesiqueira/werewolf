@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" fill="none">
+  <!-- Portrait 10: Character with top hat / formal -->
+  <rect width="120" height="160" rx="8" fill="#111119"/>
+  <!-- Top hat -->
+  <rect x="40" y="8" width="40" height="28" rx="2" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="1"/>
+  <!-- Hat brim -->
+  <ellipse cx="60" cy="36" rx="36" ry="6" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="1"/>
+  <!-- Hat band -->
+  <rect x="42" y="30" width="36" height="4" rx="1" fill="#3a3a4e"/>
+  <!-- Head -->
+  <circle cx="60" cy="58" r="20" fill="#2a2a3a"/>
+  <!-- Monocle on right eye -->
+  <circle cx="69" cy="54" r="6" stroke="#a09d95" stroke-width="1.2" fill="none"/>
+  <line x1="75" y1="54" x2="82" y2="70" stroke="#a09d95" stroke-width="0.8"/>
+  <!-- Left eye -->
+  <ellipse cx="51" cy="54" rx="2.5" ry="2" fill="#605e58"/>
+  <!-- Right eye behind monocle -->
+  <circle cx="69" cy="54" r="1.5" fill="#605e58"/>
+  <!-- Raised eyebrow -->
+  <path d="M63 48 Q69 44 75 48" stroke="#605e58" stroke-width="1.2" fill="none"/>
+  <!-- Nose - refined -->
+  <path d="M59 57 L58 62 L62 62" stroke="#605e58" stroke-width="0.8" fill="none"/>
+  <!-- Thin mustache -->
+  <path d="M52 66 Q56 64 60 66 Q64 64 68 66" stroke="#1f1f2e" stroke-width="1.5" fill="none"/>
+  <!-- Mouth -->
+  <path d="M56 70 Q60 72 64 70" stroke="#605e58" stroke-width="0.8" fill="none"/>
+  <!-- Shoulders - formal coat -->
+  <path d="M16 145 Q30 100 60 95 Q90 100 104 145" fill="#1f1f2e" stroke="#2a2a3a" stroke-width="1.5"/>
+  <!-- Bow tie -->
+  <path d="M52 95 L56 98 L52 101" fill="#3a3a4e"/>
+  <path d="M68 95 L64 98 L68 101" fill="#3a3a4e"/>
+  <circle cx="60" cy="98" r="2" fill="#3a3a4e"/>
+</svg>

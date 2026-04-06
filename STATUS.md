@@ -7,6 +7,6 @@ Stack: Python 3.12 + FastAPI + SQLAlchemy | Next.js 14 + TypeScript + Tailwind |
 |-------|--------|------------|-------|--------|
 | 1     | ✅ DONE | 1 | 70 unit | 0becb91 |
 | 2     | ✅ DONE | 1 | 74 unit (144 total) | a543da6 |
-| 3     | ⏳ PENDING | | | |
+| 3     | ✅ DONE | 1 | 11 unit (155 total) | bc46c80 |
 | 4     | ⏳ PENDING | | | |
 | 5     | ⏳ PENDING | | | |

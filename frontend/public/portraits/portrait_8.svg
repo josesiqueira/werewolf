@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" fill="none">
+  <!-- Portrait 8: Character with headscarf/bandana -->
+  <rect width="120" height="160" rx="8" fill="#111119"/>
+  <!-- Headscarf -->
+  <path d="M32 52 Q30 30 60 24 Q90 30 88 52" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="1.2"/>
+  <!-- Scarf knot detail -->
+  <path d="M84 48 L92 58 L88 62 L82 52" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="0.8"/>
+  <!-- Scarf band -->
+  <path d="M34 48 Q60 42 86 48" stroke="#3a3a4e" stroke-width="2"/>
+  <!-- Head -->
+  <circle cx="60" cy="56" r="20" fill="#2a2a3a"/>
+  <!-- Eyes - sharp -->
+  <path d="M48 52 L56 51 L48 54Z" fill="#605e58"/>
+  <path d="M72 52 L64 51 L72 54Z" fill="#605e58"/>
+  <!-- Nose -->
+  <path d="M59 56 L58 61 L62 61" stroke="#605e58" stroke-width="0.8" fill="none"/>
+  <!-- Smirk -->
+  <path d="M54 66 Q58 69 66 65" stroke="#605e58" stroke-width="1" fill="none"/>
+  <!-- Earring -->
+  <circle cx="40" cy="60" r="2" stroke="#3a3a4e" stroke-width="1" fill="none"/>
+  <!-- Shoulders -->
+  <path d="M18 140 Q30 100 60 95 Q90 100 102 140" fill="#1f1f2e" stroke="#2a2a3a" stroke-width="1.5"/>
+  <!-- Open collar -->
+  <path d="M48 95 L56 108 L60 100 L64 108 L72 95" stroke="#3a3a4e" stroke-width="1" fill="none"/>
+</svg>

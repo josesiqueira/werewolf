@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" fill="none">
+  <!-- Portrait 1: Basic villager silhouette -->
+  <rect width="120" height="160" rx="8" fill="#111119"/>
+  <circle cx="60" cy="55" r="28" fill="#1f1f2e" stroke="#2a2a3a" stroke-width="1.5"/>
+  <!-- Face -->
+  <circle cx="60" cy="55" r="22" fill="#2a2a3a"/>
+  <!-- Eyes -->
+  <ellipse cx="52" cy="50" rx="3" ry="2.5" fill="#605e58"/>
+  <ellipse cx="68" cy="50" rx="3" ry="2.5" fill="#605e58"/>
+  <!-- Nose -->
+  <path d="M58 55 L60 60 L62 55" stroke="#605e58" stroke-width="1" fill="none"/>
+  <!-- Mouth -->
+  <path d="M54 65 Q60 70 66 65" stroke="#605e58" stroke-width="1.2" fill="none"/>
+  <!-- Shoulders -->
+  <path d="M20 130 Q30 100 60 95 Q90 100 100 130" fill="#1f1f2e" stroke="#2a2a3a" stroke-width="1.5"/>
+  <!-- Shirt collar -->
+  <path d="M48 95 L60 108 L72 95" stroke="#3a3a4e" stroke-width="1.5" fill="none"/>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" fill="none">
+  <!-- Portrait 5: Character with long hair -->
+  <rect width="120" height="160" rx="8" fill="#111119"/>
+  <!-- Long hair behind head -->
+  <path d="M30 45 Q28 25 60 20 Q92 25 90 45 L92 100 Q85 105 75 100 L75 65" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="0.8"/>
+  <path d="M30 45 L28 100 Q35 105 45 100 L45 65" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="0.8"/>
+  <!-- Head -->
+  <circle cx="60" cy="52" r="22" fill="#2a2a3a"/>
+  <!-- Hair strands framing face -->
+  <path d="M38 45 Q40 55 42 70" stroke="#3a3a4e" stroke-width="1.5" fill="none"/>
+  <path d="M82 45 Q80 55 78 70" stroke="#3a3a4e" stroke-width="1.5" fill="none"/>
+  <!-- Eyes - almond shaped -->
+  <path d="M47 48 Q51 44 55 48 Q51 50 47 48" fill="#605e58"/>
+  <path d="M65 48 Q69 44 73 48 Q69 50 65 48" fill="#605e58"/>
+  <!-- Nose -->
+  <path d="M59 53 L58 58 L62 58" stroke="#605e58" stroke-width="0.8" fill="none"/>
+  <!-- Lips -->
+  <path d="M54 63 Q57 61 60 63 Q63 61 66 63" stroke="#605e58" stroke-width="1" fill="none"/>
+  <path d="M54 63 Q60 67 66 63" stroke="#605e58" stroke-width="0.8" fill="none"/>
+  <!-- Shoulders - slender -->
+  <path d="M22 135 Q35 100 60 95 Q85 100 98 135" fill="#1f1f2e" stroke="#2a2a3a" stroke-width="1.5"/>
+  <!-- Neckline -->
+  <path d="M50 95 Q60 102 70 95" stroke="#3a3a4e" stroke-width="1" fill="none"/>
+</svg>

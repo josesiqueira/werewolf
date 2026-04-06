@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" fill="none">
+  <!-- Portrait 4: Character with beard -->
+  <rect width="120" height="160" rx="8" fill="#111119"/>
+  <!-- Head -->
+  <circle cx="60" cy="52" r="24" fill="#2a2a3a"/>
+  <!-- Hair - thick on top -->
+  <path d="M36 48 Q34 25 60 22 Q86 25 84 48" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="0.8"/>
+  <!-- Eyebrows - thick -->
+  <path d="M46 44 L56 42" stroke="#1f1f2e" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M64 42 L74 44" stroke="#1f1f2e" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Eyes -->
+  <circle cx="51" cy="49" r="2.5" fill="#605e58"/>
+  <circle cx="69" cy="49" r="2.5" fill="#605e58"/>
+  <!-- Nose - broad -->
+  <path d="M57 53 Q60 60 63 53" stroke="#605e58" stroke-width="1.2" fill="none"/>
+  <!-- Beard -->
+  <path d="M40 62 Q40 85 60 88 Q80 85 80 62" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="0.8"/>
+  <!-- Mouth visible through beard -->
+  <path d="M53 67 L67 67" stroke="#2a2a3a" stroke-width="1.2"/>
+  <!-- Shoulders - broad -->
+  <path d="M12 140 Q25 98 60 92 Q95 98 108 140" fill="#1f1f2e" stroke="#2a2a3a" stroke-width="1.5"/>
+  <!-- Vest -->
+  <line x1="60" y1="92" x2="60" y2="140" stroke="#3a3a4e" stroke-width="1"/>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" fill="none">
+  <!-- Portrait 6: Hooded character -->
+  <rect width="120" height="160" rx="8" fill="#111119"/>
+  <!-- Hood -->
+  <path d="M25 75 Q20 30 60 18 Q100 30 95 75 L88 95 L32 95 Z" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="1"/>
+  <!-- Hood shadow interior -->
+  <path d="M35 70 Q33 40 60 30 Q87 40 85 70 L80 88 L40 88 Z" fill="#181824"/>
+  <!-- Face visible in hood shadow -->
+  <circle cx="60" cy="58" r="18" fill="#2a2a3a"/>
+  <!-- Eyes - glinting -->
+  <ellipse cx="53" cy="55" rx="2.5" ry="2" fill="#605e58"/>
+  <ellipse cx="67" cy="55" rx="2.5" ry="2" fill="#605e58"/>
+  <!-- Eye glint -->
+  <circle cx="54" cy="54" r="0.8" fill="#a09d95"/>
+  <circle cx="68" cy="54" r="0.8" fill="#a09d95"/>
+  <!-- Nose -->
+  <line x1="60" y1="58" x2="59" y2="63" stroke="#605e58" stroke-width="0.8"/>
+  <!-- Mouth -->
+  <line x1="55" y1="68" x2="65" y2="68" stroke="#605e58" stroke-width="1"/>
+  <!-- Cloak body -->
+  <path d="M10 145 Q25 95 60 92 Q95 95 110 145" fill="#1f1f2e" stroke="#2a2a3a" stroke-width="1.5"/>
+  <!-- Cloak clasp -->
+  <circle cx="60" cy="95" r="3" fill="#3a3a4e" stroke="#605e58" stroke-width="0.8"/>
+</svg>

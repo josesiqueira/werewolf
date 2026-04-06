@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" fill="none">
+  <!-- Portrait 7: Elder with mustache -->
+  <rect width="120" height="160" rx="8" fill="#111119"/>
+  <!-- Head - slightly elongated -->
+  <ellipse cx="60" cy="52" rx="22" ry="24" fill="#2a2a3a"/>
+  <!-- Receding hair -->
+  <path d="M42 38 Q42 28 60 26 Q78 28 78 38" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="0.8"/>
+  <!-- Wrinkle lines on forehead -->
+  <path d="M48 38 L72 38" stroke="#3a3a4e" stroke-width="0.5" opacity="0.5"/>
+  <path d="M50 42 L70 42" stroke="#3a3a4e" stroke-width="0.5" opacity="0.5"/>
+  <!-- Eyes - wise, slightly droopy -->
+  <path d="M48 50 L56 49" stroke="#605e58" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="52" cy="51" r="1.5" fill="#605e58"/>
+  <path d="M64 49 L72 50" stroke="#605e58" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="68" cy="51" r="1.5" fill="#605e58"/>
+  <!-- Nose - prominent -->
+  <path d="M58 53 Q56 62 60 64 Q64 62 62 53" stroke="#605e58" stroke-width="1" fill="none"/>
+  <!-- Mustache -->
+  <path d="M48 66 Q52 62 60 66 Q68 62 72 66" stroke="#1f1f2e" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+  <!-- Mouth below mustache -->
+  <path d="M54 72 Q60 74 66 72" stroke="#605e58" stroke-width="0.8" fill="none"/>
+  <!-- Shoulders with vest -->
+  <path d="M18 140 Q30 100 60 95 Q90 100 102 140" fill="#1f1f2e" stroke="#2a2a3a" stroke-width="1.5"/>
+  <!-- Vest buttons -->
+  <circle cx="60" cy="108" r="1.5" fill="#3a3a4e"/>
+  <circle cx="60" cy="118" r="1.5" fill="#3a3a4e"/>
+  <circle cx="60" cy="128" r="1.5" fill="#3a3a4e"/>
+</svg>

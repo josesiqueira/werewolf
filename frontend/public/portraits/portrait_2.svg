@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" fill="none">
+  <!-- Portrait 2: Character with wide-brim hat -->
+  <rect width="120" height="160" rx="8" fill="#111119"/>
+  <!-- Hat brim -->
+  <ellipse cx="60" cy="32" rx="42" ry="8" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="1"/>
+  <!-- Hat top -->
+  <path d="M38 32 Q38 12 60 10 Q82 12 82 32" fill="#1f1f2e" stroke="#3a3a4e" stroke-width="1.2"/>
+  <!-- Hat band -->
+  <rect x="40" y="28" width="40" height="4" rx="1" fill="#3a3a4e"/>
+  <!-- Head -->
+  <circle cx="60" cy="55" r="22" fill="#2a2a3a"/>
+  <!-- Eyes - narrow, suspicious -->
+  <path d="M48 50 L56 48 L48 52" fill="#605e58"/>
+  <path d="M72 50 L64 48 L72 52" fill="#605e58"/>
+  <!-- Nose -->
+  <line x1="60" y1="53" x2="58" y2="59" stroke="#605e58" stroke-width="1"/>
+  <!-- Mouth - thin line -->
+  <line x1="53" y1="65" x2="67" y2="65" stroke="#605e58" stroke-width="1.2"/>
+  <!-- Shoulders - coat -->
+  <path d="M15 135 Q25 100 60 95 Q95 100 105 135" fill="#1f1f2e" stroke="#2a2a3a" stroke-width="1.5"/>
+  <!-- Coat collar high -->
+  <path d="M42 95 L42 105 L55 100" stroke="#3a3a4e" stroke-width="1.5" fill="#1f1f2e"/>
+  <path d="M78 95 L78 105 L65 100" stroke="#3a3a4e" stroke-width="1.5" fill="#1f1f2e"/>
+</svg>
