@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.agent_interface import AgentInterface, AgentResponse
 from app.engine.day import extract_mentions, select_speaker
-from app.engine.game_state import GameStateMachine, PlayerInfo, SeerResult
+from app.engine.game_state import GamePhase, GameStateMachine, PlayerInfo, SeerResult
 from app.engine.mayor import handle_mayor_succession, run_mayor_election
 from app.engine.night import resolve_night
 from app.engine.roles import assign_roles, get_private_info
@@ -555,7 +555,10 @@ async def run_game(
         # ==============================================================
         # 3c. VOTE PHASE
         # ==============================================================
-        game_state.transition_to_next_phase()  # -> VOTE
+        # Set phase directly — the debate loop managed bid/speech turns
+        # internally without using the state machine's micro-transitions,
+        # so transition_to_next_phase() would land on the wrong state.
+        game_state.current_phase = GamePhase.VOTE
         base_state = _build_game_state(game_state, players, role_assignments)
 
         vote_map: dict[str, str] = {}
