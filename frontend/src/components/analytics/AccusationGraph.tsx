@@ -119,8 +119,8 @@ export default function AccusationGraph({
       .attr("stroke", "#0c0c14")
       .attr("stroke-width", 2)
       .attr("cursor", "grab")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .call(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         d3
           .drag<SVGCircleElement, SimNode>()
           .on("start", (event, d) => {
@@ -136,8 +136,8 @@ export default function AccusationGraph({
             if (!event.active) simulation.alphaTarget(0);
             d.fx = null;
             d.fy = null;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }) as unknown as (selection: d3.Selection<SVGCircleElement, SimNode, SVGGElement, unknown>) => void,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          }) as any,
       );
 
     // Labels
