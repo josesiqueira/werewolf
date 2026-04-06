@@ -772,3 +772,808 @@ All pure-logic tests (game_state, roles, night, mayor, day, vote) require **no d
 4. **Randomised tests** (UT-024, UT-028, UT-032, UT-045): pin `random.seed(42)` where a deterministic assertion is needed; otherwise assert the result is in the valid set.
 
 5. **Performance budget**: all pure-logic tests must complete in < 1 s each; integration tests in < 5 s each (no LLM calls are made, so this is achievable).
+
+---
+
+# Phase 2 — Agent System Tests
+
+**Scope**: `backend/app/agent/` — output parser, leak detection, personas, technique loader, memory manager, system/user message builders, retry/fallback logic.  
+**Stack additions**: `pytest-asyncio`, `unittest.mock` (no real OpenAI calls; all LLM interactions are patched).
+
+## Phase 2 fixture conventions
+
+```python
+# Re-use the same 7-player ID set from Phase 1
+P = [str(uuid.uuid4()) for _ in range(7)]
+SELF_ID = P[0]
+ALIVE_OTHERS = P[1:]   # 6 other alive players
+
+# Canonical valid AgentResponse JSON payload
+VALID_JSON = json.dumps({
+    "private_reasoning": "I think P[2] is the seer.",
+    "public_statement": "I have no information to share yet.",
+    "vote_target": P[2],
+    "bid_level": 2,
+    "technique_self_label": "Core Principle",
+    "deception_self_label": "truthful",
+    "confidence": 4,
+})
+```
+
+All Phase 2 tests are **pure-logic** (no database, no network). Run with `pytest -m "not integration"`.
+
+---
+
+## 12. Output Parser — `agent/output_parser.py`
+
+### UT-071
+**Name**: Valid JSON parses to correct `AgentResponse` fields  
+**Module**: `parse_agent_response`  
+**Description**: A clean, well-formed JSON string with all seven required fields must produce an `AgentResponse` whose attributes match the input exactly, with no auto-correction applied.  
+**Input**:
+```python
+raw = json.dumps({
+    "private_reasoning": "I suspect P[1].",
+    "public_statement": "Let's vote carefully.",
+    "vote_target": P[2],          # P[2] is alive, not self
+    "bid_level": 3,
+    "technique_self_label": "Core Principle",
+    "deception_self_label": "omission",
+    "confidence": 5,
+})
+parse_agent_response(raw, alive_players=P, self_id=P[0], technique_sections=["Core Principle"])
+```
+**Expected outputs**:
+- `result.public_statement == "Let's vote carefully."`
+- `result.bid_level == 3`
+- `result.deception_self_label == "omission"`
+- `result.confidence == 5`
+- `result.vote_target == P[2]`  
+**Priority**: HIGH
+
+---
+
+### UT-072
+**Name**: Markdown-fenced JSON is stripped and parsed successfully  
+**Module**: `parse_agent_response` → `_strip_markdown_fences`  
+**Description**: LLMs often wrap output in ` ```json … ``` ` fences. The parser must strip them and still produce a valid `AgentResponse`.  
+**Input**:
+```python
+raw = "```json\n" + json.dumps({
+    "private_reasoning": "hidden",
+    "public_statement": "Hello village.",
+    "vote_target": None,
+    "bid_level": 1,
+    "technique_self_label": "none",
+    "deception_self_label": "truthful",
+    "confidence": 3,
+}) + "\n```"
+parse_agent_response(raw, alive_players=P, self_id=P[0], technique_sections=[])
+```
+**Expected output**: `result.public_statement == "Hello village."` — no `ValueError` or `JSONDecodeError` raised  
+**Priority**: HIGH
+
+---
+
+### UT-073
+**Name**: Trailing-comma JSON is repaired and parsed  
+**Module**: `parse_agent_response` → `_fix_trailing_commas`  
+**Description**: A JSON object with a trailing comma before the closing brace (a common LLM error) must be repaired and produce a valid response rather than falling back to defaults.  
+**Input**:
+```python
+raw = """{
+  "private_reasoning": "thinking",
+  "public_statement": "I agree.",
+  "vote_target": null,
+  "bid_level": 1,
+  "technique_self_label": "none",
+  "deception_self_label": "truthful",
+  "confidence": 3,
+}"""
+parse_agent_response(raw, alive_players=P, self_id=P[0], technique_sections=[])
+```
+**Expected output**: `result.public_statement == "I agree."` — not the parse-failure default `"I need more time to think about this."`  
+**Priority**: HIGH
+
+---
+
+### UT-074
+**Name**: Completely invalid text falls back to conservative defaults  
+**Module**: `parse_agent_response` → `_get_conservative_defaults`  
+**Description**: When the LLM returns plain prose instead of JSON, the parser must silently return a safe default `AgentResponse` rather than raising.  
+**Input**:
+```python
+raw = "Sorry, I cannot assist with that request."
+result = parse_agent_response(raw, alive_players=P, self_id=P[0], technique_sections=[])
+```
+**Expected outputs**:
+- `result.private_reasoning == "[parse failure — using defaults]"`
+- `result.public_statement == "I need more time to think about this."`
+- `result.bid_level == 1`
+- `result.deception_self_label == "truthful"`
+- `result.confidence == 3`
+- `result.vote_target in P[1:]` (a valid alive player that is not self)  
+**Priority**: HIGH
+
+---
+
+### UT-075
+**Name**: `vote_target` pointing to self is auto-corrected to a valid target  
+**Module**: `parse_agent_response` — vote_target validation  
+**Description**: If an LLM votes for its own player_id, the parser must silently reassign to one of the other alive players.  
+**Input**:
+```python
+raw = json.dumps({..., "vote_target": P[0]})   # self_id == P[0]
+result = parse_agent_response(raw, alive_players=P, self_id=P[0], technique_sections=[])
+```
+**Expected output**: `result.vote_target != P[0]` and `result.vote_target in P[1:]`  
+**Priority**: HIGH
+
+---
+
+### UT-076
+**Name**: `vote_target` for an eliminated (not alive) player is auto-corrected  
+**Module**: `parse_agent_response` — vote_target validation  
+**Description**: A player not in `alive_players` must not survive as the vote target.  
+**Input**:
+```python
+dead_player = str(uuid.uuid4())   # not in alive_players
+raw = json.dumps({..., "vote_target": dead_player})
+result = parse_agent_response(raw, alive_players=P, self_id=P[0], technique_sections=[])
+```
+**Expected output**: `result.vote_target in P[1:]` (one of the actual alive players, not `dead_player`)  
+**Priority**: HIGH
+
+---
+
+### UT-077
+**Name**: `bid_level` above 4 is clamped to 4  
+**Module**: `parse_agent_response` — bid clamping  
+**Description**: An out-of-range high bid must be silently clamped, never rejected outright.  
+**Input**: `raw = json.dumps({..., "bid_level": 99})`  
+**Expected output**: `result.bid_level == 4`  
+**Priority**: MEDIUM
+
+---
+
+### UT-078
+**Name**: Negative `bid_level` is clamped to 0  
+**Module**: `parse_agent_response` — bid clamping  
+**Description**: A negative bid must be clamped to 0, not raise or become a default of 1.  
+**Input**: `raw = json.dumps({..., "bid_level": -5})`  
+**Expected output**: `result.bid_level == 0`  
+**Priority**: MEDIUM
+
+---
+
+### UT-079
+**Name**: Unrecognised `deception_self_label` is auto-corrected to "truthful"  
+**Module**: `parse_agent_response` — deception label validation  
+**Description**: Any value not in `{"truthful", "omission", "distortion", "fabrication", "misdirection"}` must be replaced with `"truthful"`.  
+**Inputs**: `"lying"`, `"honest"`, `"DECEIVING"`, `""`.  
+**Expected output**: `result.deception_self_label == "truthful"` for every input  
+**Priority**: MEDIUM
+
+---
+
+### UT-080
+**Name**: Valid `deception_self_label` values are preserved exactly  
+**Module**: `parse_agent_response` — deception label validation  
+**Description**: All five valid labels must pass through unchanged.  
+**Inputs**: `"truthful"`, `"omission"`, `"distortion"`, `"fabrication"`, `"misdirection"` (sent lowercase).  
+**Expected outputs**: Each `result.deception_self_label` equals the input value exactly  
+**Priority**: MEDIUM
+
+---
+
+### UT-081
+**Name**: Missing `bid_level` key defaults to 1  
+**Module**: `parse_agent_response` — bid default  
+**Description**: When the JSON omits `bid_level` entirely, the default must be 1 (conservative), not 0 or None.  
+**Input**: `raw = json.dumps({..., "public_statement": "hi"})` with no `bid_level` key  
+**Expected output**: `result.bid_level == 1`  
+**Priority**: LOW
+
+---
+
+### UT-082
+**Name**: Missing `confidence` key defaults to 3  
+**Module**: `parse_agent_response` — confidence default  
+**Description**: Absent `confidence` must produce the mid-range default of 3.  
+**Input**: JSON object without a `confidence` key  
+**Expected output**: `result.confidence == 3`  
+**Priority**: LOW
+
+---
+
+## 13. Werewolf Leak Detection — `agent/output_parser.py`
+
+### UT-083
+**Name**: Explicit role admission triggers leak detection  
+**Module**: `check_werewolf_leaks`  
+**Description**: A statement containing `"I'm a werewolf"` must be flagged and replaced with generic text drawn from `_GENERIC_REPLACEMENTS`.  
+**Input**: `statement = "Trust me everyone — I'm a werewolf and I chose to save you."`  
+**Expected outputs**:
+- `has_leak == True`
+- `cleaned != statement`
+- `cleaned in _GENERIC_REPLACEMENTS`  
+**Priority**: HIGH
+
+---
+
+### UT-084
+**Name**: Direct night-kill admission triggers leak detection  
+**Module**: `check_werewolf_leaks`  
+**Description**: A statement matching the pattern `"we killed … last night"` must be caught.  
+**Input**: `statement = "We killed Alice last night to protect ourselves."`  
+**Expected outputs**: `has_leak == True`, `cleaned != statement`  
+**Priority**: HIGH
+
+---
+
+### UT-085
+**Name**: Wolf teammate reference triggers leak detection  
+**Module**: `check_werewolf_leaks`  
+**Description**: The phrase `"my wolf partner"` must match pattern `r"\bwolf\s+partner\b"` and be redacted.  
+**Input**: `statement = "My wolf partner and I discussed this."`  
+**Expected outputs**: `has_leak == True`, `cleaned in _GENERIC_REPLACEMENTS`  
+**Priority**: HIGH
+
+---
+
+### UT-086
+**Name**: Innocent wolf-themed language does NOT trigger leak detection  
+**Module**: `check_werewolf_leaks`  
+**Description**: Game-legal statements that merely discuss wolves as game concepts (not first-person admissions) must not be flagged.  
+**Inputs** (each must return `has_leak == False`):
+- `"I think there's a wolf among us, let's be careful."`
+- `"The wolves will win if we don't vote correctly."`
+- `"We should hunt the wolf down."`  
+**Expected output**: `has_leak == False` and `cleaned == statement` for every input  
+**Priority**: HIGH
+
+---
+
+### UT-087
+**Name**: Empty statement is returned unchanged with `has_leak == False`  
+**Module**: `check_werewolf_leaks`  
+**Description**: Edge case — empty string must not raise and must not be misidentified as a leak.  
+**Input**: `statement = ""`  
+**Expected outputs**: `has_leak == False`, `cleaned == ""`  
+**Priority**: LOW
+
+---
+
+### UT-088
+**Name**: "Our kill" phrase triggers leak detection  
+**Module**: `check_werewolf_leaks`  
+**Description**: The short phrase `"our kill"` matches the dedicated pattern and must be replaced.  
+**Input**: `statement = "We need to be careful — our kill last night raised suspicion."`  
+**Expected output**: `has_leak == True`  
+**Priority**: MEDIUM
+
+---
+
+### UT-089
+**Name**: "As a werewolf" phrase triggers leak detection  
+**Module**: `check_werewolf_leaks`  
+**Description**: Confession mid-speech using `"as a werewolf"` must be caught.  
+**Input**: `statement = "As a werewolf, I obviously want to mislead you."`  
+**Expected output**: `has_leak == True`, `cleaned in _GENERIC_REPLACEMENTS`  
+**Priority**: MEDIUM
+
+---
+
+## 14. Personas — `agent/personas.py`
+
+### UT-090
+**Name**: `PERSONAS` dict contains exactly 7 entries with distinct keys  
+**Module**: `personas.PERSONAS`  
+**Description**: The persona catalogue must have exactly the 7 documented keys. No duplicates are possible in a dict, but the count must be exact.  
+**Input**: `PERSONAS` (module-level constant)  
+**Expected outputs**:
+- `len(PERSONAS) == 7`
+- `set(PERSONAS.keys()) == {"analytical", "aggressive", "quiet", "warm", "suspicious", "diplomatic", "blunt"}`  
+**Priority**: HIGH
+
+---
+
+### UT-091
+**Name**: Every persona description is a non-empty string  
+**Module**: `personas.PERSONAS`  
+**Description**: Each of the 7 descriptions must be a `str` with `len > 0`. An empty or None description would produce a broken system message.  
+**Input**: iterate `PERSONAS.values()`  
+**Expected output**: all values satisfy `isinstance(v, str) and len(v) > 0`  
+**Priority**: HIGH
+
+---
+
+### UT-092
+**Name**: `assign_personas` for 7 players produces all-unique assignments  
+**Module**: `assign_personas`  
+**Description**: Sampling 7 personas for 7 players must produce a bijection — every player gets a different persona.  
+**Input**: `player_ids = [f"p{i}" for i in range(7)]`  
+**Expected outputs**:
+- `len(result) == 7`
+- `len(set(result.values())) == 7` (all 7 distinct persona names used)  
+**Priority**: HIGH
+
+---
+
+### UT-093
+**Name**: `assign_personas` raises `ValueError` when called with more than 7 players  
+**Module**: `assign_personas`  
+**Description**: With 8 or more player IDs there are not enough unique personas; a `ValueError` must be raised.  
+**Input**: `player_ids = [f"p{i}" for i in range(8)]`  
+**Expected output**: `pytest.raises(ValueError)` with a message mentioning how many are available  
+**Priority**: MEDIUM
+
+---
+
+### UT-094
+**Name**: `get_persona_description` returns the correct description for each persona key  
+**Module**: `get_persona_description`  
+**Description**: Spot-check three persona lookups to confirm the function returns the same text as the dict directly.  
+**Inputs**: `"analytical"`, `"blunt"`, `"warm"`  
+**Expected outputs**:
+- `get_persona_description("analytical") == PERSONAS["analytical"]`
+- `get_persona_description("blunt") == PERSONAS["blunt"]`
+- `get_persona_description("warm") == PERSONAS["warm"]`  
+**Priority**: MEDIUM
+
+---
+
+### UT-095
+**Name**: `get_persona_description` raises `KeyError` for an unknown persona  
+**Module**: `get_persona_description`  
+**Description**: An invalid persona name must raise `KeyError` (not return None or empty string).  
+**Input**: `get_persona_description("stoic")`  
+**Expected output**: `pytest.raises(KeyError)`  
+**Priority**: LOW
+
+---
+
+## 15. Technique Loader — `agent/techniques.py`
+
+### UT-096
+**Name**: All 6 non-baseline technique files load without error  
+**Module**: `preload_all` / `load_technique`  
+**Description**: After calling `preload_all()`, every profile in `PROFILE_FILE_MAP` must be present in the cache and return a non-empty string from `load_technique`.  
+**Setup**: `clear_cache()` before test to guarantee a cold cache; then `preload_all()`.  
+**Expected output**: for each profile in `["ethos", "pathos", "logos", "authority_socialproof", "reciprocity_liking", "scarcity_commitment"]`, `load_technique(profile)` returns a `str` with `len > 0`  
+**Priority**: HIGH
+
+---
+
+### UT-097
+**Name**: `load_technique("baseline")` returns `None`  
+**Module**: `load_technique`  
+**Description**: The baseline profile explicitly has no technique document; the function must return `None`, not raise and not return an empty string.  
+**Input**: `load_technique("baseline")`  
+**Expected output**: `result is None`  
+**Priority**: HIGH
+
+---
+
+### UT-098
+**Name**: `get_technique_sections("ethos")` returns the expected section headings  
+**Module**: `get_technique_sections`  
+**Description**: The ETHOS file's `## `-level headings are known; verify the loader extracts them correctly.  
+**Setup**: `clear_cache()` then call `get_technique_sections("ethos")`.  
+**Expected outputs**:
+- `result` is a `list` with `len >= 1`
+- `"Core Principle" in result`
+- `"When Accusing" in result`
+- `"When Defending" in result`  
+**Priority**: HIGH
+
+---
+
+### UT-099
+**Name**: `get_technique_sections("baseline")` returns an empty list  
+**Module**: `get_technique_sections`  
+**Description**: Baseline agents have no technique sections; the function must return `[]`, not `None` or raise.  
+**Input**: `get_technique_sections("baseline")`  
+**Expected output**: `result == []`  
+**Priority**: MEDIUM
+
+---
+
+### UT-100
+**Name**: Technique loader is idempotent — second load hits cache  
+**Module**: `load_technique` caching behaviour  
+**Description**: The file should be read from disk only once. Calling `load_technique("pathos")` twice must return the same object (or at least the same content) without error, confirming the `_cache` guard works.  
+**Setup**: `clear_cache()`, call `load_technique("pathos")` twice.  
+**Expected outputs**:
+- Both calls return identical strings (`first == second`)
+- No exception on either call  
+**Priority**: LOW
+
+---
+
+## 16. Memory Manager — `agent/memory.py`
+
+### UT-101
+**Name**: `summarize_round` includes vote result and elimination in output  
+**Module**: `MemoryManager.summarize_round`  
+**Description**: The summary string must contain the exact vote_result text and the eliminated player description when provided.  
+**Input**:
+```python
+mm = MemoryManager()
+summary = mm.summarize_round(
+    round_statements=["I trust Alice.", "Bob is suspicious."],
+    vote_result="Bob eliminated with 4 votes",
+    eliminated="Bob (villager)",
+)
+```
+**Expected outputs**:
+- `"Bob eliminated with 4 votes" in summary`
+- `"Bob (villager)" in summary`  
+**Priority**: HIGH
+
+---
+
+### UT-102
+**Name**: Accusation keywords in statements appear in the summary  
+**Module**: `MemoryManager.summarize_round`  
+**Description**: Statements containing accusation keywords (`"suspect"`, `"werewolf"`, `"lying"`, etc.) must contribute to the `"Key accusations:"` section of the summary.  
+**Input**:
+```python
+statements = [
+    "I suspect Carol is lying about her role.",
+    "Carol seems totally fine to me.",
+]
+summary = mm.summarize_round(statements, vote_result="Carol eliminated", eliminated=None)
+```
+**Expected output**: `"Key accusations:" in summary` and `"Carol" in summary`  
+**Priority**: MEDIUM
+
+---
+
+### UT-103
+**Name**: `get_context` returns empty string when history is empty  
+**Module**: `MemoryManager.get_context`  
+**Description**: With no prior rounds, calling `get_context` must return `""` rather than headers-only or crash.  
+**Input**: `mm.get_context(current_round=1, full_history=[])`  
+**Expected output**: `result == ""`  
+**Priority**: MEDIUM
+
+---
+
+### UT-104
+**Name**: Rounds beyond `FULL_TRANSCRIPT_ROUNDS` (3) appear as summaries, not full transcripts  
+**Module**: `MemoryManager.get_context`  
+**Description**: With 5 rounds of history, rounds 1 and 2 must appear as `[Round N summary]` blocks (not full transcripts), while rounds 3–5 appear as `[Round N - full transcript]` blocks.  
+**Input**:
+```python
+history = [[f"Statement R{r+1} S{s}" for s in range(2)] for r in range(5)]
+mm = MemoryManager(max_tokens=10000)  # generous budget so nothing is dropped
+context = mm.get_context(current_round=5, full_history=history)
+```
+**Expected outputs**:
+- `"[Round 1 summary]" in context`
+- `"[Round 2 summary]" in context`
+- `"[Round 3 - full transcript]" in context`
+- `"[Round 5 - full transcript]" in context`  
+**Priority**: HIGH
+
+---
+
+### UT-105
+**Name**: `get_context` respects the token budget and truncates older rounds first  
+**Module**: `MemoryManager.get_context`  
+**Description**: With a very tight token budget (50 tokens), the context must stay under the limit and must not raise. Older rounds should be omitted before newer ones.  
+**Input**:
+```python
+history = [["A " * 200] for _ in range(6)]   # each round ~267 estimated tokens
+mm = MemoryManager(max_tokens=50)
+context = mm.get_context(current_round=6, full_history=history)
+```
+**Expected outputs**:
+- `_estimate_tokens(context) <= 50` (using the same word-count approximation)
+- No exception raised  
+**Priority**: MEDIUM
+
+---
+
+### UT-106
+**Name**: `store_round_summary` pre-populates cache so `get_context` uses stored summary  
+**Module**: `MemoryManager.store_round_summary` + `get_context`  
+**Description**: After pre-storing a custom summary for round 1, `get_context` with 4+ rounds of history must use the stored summary string verbatim (not re-summarize from statements).  
+**Input**:
+```python
+mm = MemoryManager(max_tokens=5000)
+mm.store_round_summary(1, ["ignored statement"], "custom vote result", "custom elimination")
+history = [["ignored statement"]] + [[f"R{r}" for r in range(2)] for _ in range(3)]
+context = mm.get_context(current_round=4, full_history=history)
+```
+**Expected output**: `"custom vote result" in context`  
+**Priority**: MEDIUM
+
+---
+
+## 17. System Message Builder — `agent/prompts/system_message.py`
+
+### UT-107
+**Name**: System message for a villager contains all five required sections  
+**Module**: `build_system_message`  
+**Description**: The assembled system message must include the game rules section, role assignment line, persona header, JSON format instructions, and behavioral instructions — all as non-empty content.  
+**Input**:
+```python
+msg = build_system_message(
+    role="villager",
+    player_id=P[0],
+    persona_description="You are reserved and careful.",
+)
+```
+**Expected outputs** (all `in msg`):
+- `"Werewolf"` (game rules section)
+- `f"Player {P[0]}"` (role section)
+- `"Villager"` (role capitalised)
+- `"Your Persona:"` (persona section header)
+- `"private_reasoning"` (JSON format instructions)
+- `"Never reveal private information"` (behavioral instructions)  
+**Priority**: HIGH
+
+---
+
+### UT-108
+**Name**: Werewolf system message includes teammate IDs  
+**Module**: `build_system_message`  
+**Description**: When building a message for a werewolf with teammates, the teammate player IDs must appear in the role section.  
+**Input**:
+```python
+msg = build_system_message(
+    role="werewolf",
+    player_id=P[0],
+    persona_description="Bold and aggressive.",
+    teammates=[P[1], P[2]],
+)
+```
+**Expected outputs**:
+- `f"Player {P[1]}" in msg`
+- `f"Player {P[2]}" in msg`
+- `"werewolf teammate" in msg.lower()`  
+**Priority**: HIGH
+
+---
+
+### UT-109
+**Name**: Seer system message references nightly investigation ability  
+**Module**: `build_system_message`  
+**Description**: The seer role section must mention the investigation mechanic so the agent understands its night action.  
+**Input**: `build_system_message(role="seer", player_id=P[2], persona_description="Quiet observer.")`  
+**Expected output**: `"investigate" in msg.lower()`  
+**Priority**: MEDIUM
+
+---
+
+### UT-110
+**Name**: `get_or_build_system_message` returns identical string on second call (cache hit)  
+**Module**: `get_or_build_system_message` caching  
+**Description**: Two calls with the same `(game_id, player_id)` pair must return the exact same string object (or at least equal strings), confirming the cache is working.  
+**Input**:
+```python
+from app.agent.prompts.system_message import get_or_build_system_message, clear_cache
+clear_cache()
+game_id = "test-game-1"
+first  = get_or_build_system_message(game_id, P[0], "villager", "Careful thinker.")
+second = get_or_build_system_message(game_id, P[0], "villager", "Careful thinker.")
+```
+**Expected output**: `first == second`  
+**Priority**: LOW
+
+---
+
+## 18. User Message Builder — `agent/prompts/user_message.py`
+
+### UT-111
+**Name**: Non-baseline agent user message includes the persuasion technique section  
+**Module**: `build_user_message`  
+**Description**: When `technique_text` is non-None, the user message must wrap it with the `=== PERSUASION TECHNIQUE GUIDE ===` header and footer.  
+**Input**:
+```python
+msg = build_user_message(
+    phase="day_speech",
+    game_state={"current_round": 1, "current_phase": "DAY_SPEECH", "alive_players": P},
+    technique_text="Ethos content here.",
+)
+```
+**Expected outputs**:
+- `"=== PERSUASION TECHNIQUE GUIDE ===" in msg`
+- `"Ethos content here." in msg`
+- `"=== END PERSUASION TECHNIQUE GUIDE ===" in msg`  
+**Priority**: HIGH
+
+---
+
+### UT-112
+**Name**: Baseline agent user message omits the persuasion technique section  
+**Module**: `build_user_message`  
+**Description**: When `technique_text=None`, the technique section headers must not appear in the output at all.  
+**Input**:
+```python
+msg = build_user_message(
+    phase="vote",
+    game_state={"current_round": 2, "current_phase": "VOTE", "alive_players": P},
+    technique_text=None,
+)
+```
+**Expected outputs**:
+- `"PERSUASION TECHNIQUE GUIDE" not in msg`
+- `"=== CURRENT GAME STATE ===" in msg`  
+**Priority**: HIGH
+
+---
+
+### UT-113
+**Name**: Game state section lists all alive players  
+**Module**: `build_user_message` → `_format_game_state`  
+**Description**: The formatted game state must include every player ID in `alive_players`.  
+**Input**:
+```python
+msg = build_user_message(
+    phase="day_bid",
+    game_state={
+        "current_round": 1,
+        "current_phase": "DAY_BID",
+        "alive_players": [P[0], P[1], P[2]],
+    },
+)
+```
+**Expected outputs**: `P[0] in msg`, `P[1] in msg`, `P[2] in msg`  
+**Priority**: MEDIUM
+
+---
+
+### UT-114
+**Name**: Debate history appears in user message with turn numbers  
+**Module**: `build_user_message` → `_format_conversation_history`  
+**Description**: Each statement in `debate_history` must appear labelled with its turn index.  
+**Input**:
+```python
+msg = build_user_message(
+    phase="day_speech",
+    game_state={"current_round": 1, "current_phase": "DAY_SPEECH", "alive_players": P},
+    debate_history=["Alice said something.", "Bob replied."],
+)
+```
+**Expected outputs**:
+- `"=== CONVERSATION HISTORY ===" in msg`
+- `"[Turn 1] Alice said something." in msg`
+- `"[Turn 2] Bob replied." in msg`  
+**Priority**: MEDIUM
+
+---
+
+### UT-115
+**Name**: Correct phase instruction is injected for each of the 8 phases  
+**Module**: `build_user_message` — `_TURN_INSTRUCTIONS` mapping  
+**Description**: Each recognised phase must produce a message containing the phase-specific instruction keyword. Verify all 8 phases: `mayor_campaign`, `mayor_vote`, `night_kill`, `night_investigate`, `night_protect`, `day_bid`, `day_speech`, `vote`.  
+**Input**: Call `build_user_message(phase=p, game_state={...}, ...)` for each phase `p`.  
+**Expected outputs** (phrase must appear in corresponding message):
+- `mayor_campaign` → `"Campaign for mayor"` in msg
+- `mayor_vote` → `"Vote for mayor"` in msg
+- `night_kill` → `"eliminate tonight"` in msg
+- `night_investigate` → `"investigate tonight"` in msg
+- `night_protect` → `"protect tonight"` in msg
+- `day_bid` → `"bid"` in msg (lowercase)
+- `day_speech` → `"persuade"` in msg
+- `vote` → `"Vote to eliminate"` in msg  
+**Priority**: MEDIUM
+
+---
+
+## 19. Retry and Fallback — `agent/retry.py`
+
+### UT-116
+**Name**: Successful LLM call on first attempt returns result with `is_default == False`  
+**Module**: `call_with_retry_and_fallback`  
+**Description**: When the coroutine succeeds immediately, the function must return `(result, False)` — the real result with no default flag set.  
+**Setup**:
+```python
+import asyncio
+from unittest.mock import AsyncMock
+from app.agent.retry import call_with_retry_and_fallback
+
+mock_result = object()   # any sentinel
+coro = AsyncMock(return_value=mock_result)
+result, is_default = asyncio.run(
+    call_with_retry_and_fallback(coro, alive_players=P, player_id=P[0])
+)
+```
+**Expected outputs**: `result is mock_result`, `is_default == False`, `coro.call_count == 1`  
+**Priority**: HIGH
+
+---
+
+### UT-117
+**Name**: Transient failure followed by success returns real result on retry  
+**Module**: `call_with_retry_and_fallback`  
+**Description**: When the coroutine raises on the first call then succeeds on the second, the function must ultimately return `(real_result, False)`.  
+**Setup**:
+```python
+mock_result = object()
+call_count = 0
+
+async def flaky():
+    nonlocal call_count
+    call_count += 1
+    if call_count == 1:
+        raise RuntimeError("timeout")
+    return mock_result
+
+# Patch tenacity wait to zero to avoid sleeping in tests
+from unittest.mock import patch
+with patch("app.agent.retry.retry_llm_call.wait", return_value=0):
+    result, is_default = asyncio.run(
+        call_with_retry_and_fallback(lambda: flaky(), alive_players=P, player_id=P[0])
+    )
+```
+**Expected outputs**: `result is mock_result`, `is_default == False`, `call_count == 2`  
+**Priority**: HIGH
+
+---
+
+### UT-118
+**Name**: All attempts fail — fallback `AgentResponse` is returned with `is_default == True`  
+**Module**: `call_with_retry_and_fallback` + `build_default_response`  
+**Description**: When the coroutine always raises, after exhausting all retries the function must return `(AgentResponse, True)` with the sentinel private_reasoning.  
+**Setup**:
+```python
+async def always_fails():
+    raise RuntimeError("LLM down")
+
+with patch("app.agent.retry.retry_llm_call", side_effect=RuntimeError("LLM down")):
+    # or set stop=stop_after_attempt(1) to speed up
+    result, is_default = asyncio.run(
+        call_with_retry_and_fallback(always_fails, alive_players=P, player_id=P[0])
+    )
+```
+**Expected outputs**:
+- `is_default == True`
+- `result.private_reasoning == "[DEFAULT] All LLM retries exhausted."`
+- `result.public_statement == "I need more time to think about this."`
+- `result.bid_level == 1`
+- `result.vote_target in P[1:]` (not self, not None)  
+**Priority**: HIGH
+
+---
+
+### UT-119
+**Name**: `build_default_response` vote_target excludes the requesting player  
+**Module**: `build_default_response`  
+**Description**: The fallback helper must never include the player's own ID as a vote target, even if it appears in `alive_players`.  
+**Input**:
+```python
+from app.agent.retry import build_default_response
+response = build_default_response(alive_players=P, player_id=P[0])
+```
+**Expected output**: `response.vote_target != P[0]` and `response.vote_target in P[1:]`  
+**Priority**: MEDIUM
+
+---
+
+### UT-120
+**Name**: `build_default_response` with no other alive players sets `vote_target` to `None`  
+**Module**: `build_default_response`  
+**Description**: If the requesting player is the only survivor, there are no valid targets — the fallback must return `vote_target=None` rather than crashing.  
+**Input**: `build_default_response(alive_players=[P[0]], player_id=P[0])`  
+**Expected output**: `response.vote_target is None`  
+**Priority**: MEDIUM
+
+---
+
+## Updated test execution notes
+
+6. **Phase 2 tests** (UT-071 through UT-120) are all pure-logic — no database, no network. Run with `pytest -m "not integration"`.
+
+7. **Retry tests** (UT-116 through UT-118) use `unittest.mock.AsyncMock` and `unittest.mock.patch`. To avoid tenacity's real exponential sleep, patch `wait` to `wait_none()` or configure `stop=stop_after_attempt(1)` in a test-only decorator.  
+   ```python
+   from tenacity import wait_none
+   from unittest.mock import patch
+   with patch.object(retry_llm_call, "wait", wait_none()):
+       ...
+   ```
+
+8. **Technique file tests** (UT-096 through UT-100) require the `persuasion-techniques/` directory to be present at project root (already committed). Always call `clear_cache()` in the test fixture `setup`/`teardown` to avoid cross-test pollution from the module-level `_cache` dict.
