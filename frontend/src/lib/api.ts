@@ -1,6 +1,12 @@
 import type { Game, GameListFilters } from "@/types/game";
 import type { Turn } from "@/types/turn";
 import type { Batch, BatchProgress } from "@/types/batch";
+import type {
+  WinRateData,
+  SurvivalData,
+  TechniquesData,
+  AccusationsData,
+} from "@/types/analytics";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -104,7 +110,41 @@ export async function createBatch(config: {
 }
 
 // ---------------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------------
+
+function analyticsParams(batchId?: string): string {
+  if (!batchId) return "";
+  const params = new URLSearchParams();
+  params.set("batch_id", batchId);
+  return `?${params.toString()}`;
+}
+
+export async function fetchWinRates(batchId?: string): Promise<WinRateData> {
+  return apiFetch<WinRateData>(`/api/analytics/winrates${analyticsParams(batchId)}`);
+}
+
+export async function fetchSurvival(batchId?: string): Promise<SurvivalData> {
+  return apiFetch<SurvivalData>(`/api/analytics/survival${analyticsParams(batchId)}`);
+}
+
+export async function fetchTechniques(batchId?: string): Promise<TechniquesData> {
+  return apiFetch<TechniquesData>(`/api/analytics/techniques${analyticsParams(batchId)}`);
+}
+
+export async function fetchAccusations(batchId?: string): Promise<AccusationsData> {
+  return apiFetch<AccusationsData>(`/api/analytics/accusations${analyticsParams(batchId)}`);
+}
+
+// ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
+
+export function getExportUrl(format: "csv" | "json" | "ndjson", batchId?: string): string {
+  const params = new URLSearchParams();
+  if (batchId) params.set("batch_id", batchId);
+  const qs = params.toString();
+  return `${API_BASE}/api/export/${format}${qs ? `?${qs}` : ""}`;
+}
 
 export { ApiError };
