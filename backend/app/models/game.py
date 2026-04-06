@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Boolean, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Boolean, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,8 +27,16 @@ class Game(Base):
     total_turns: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_degraded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("batches.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Relationships
+    batch: Mapped["Batch | None"] = relationship(
+        "Batch", back_populates="games"
+    )
     players: Mapped[list[Player]] = relationship(
         "Player", back_populates="game", cascade="all, delete-orphan"
     )
