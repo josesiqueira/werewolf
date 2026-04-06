@@ -8,7 +8,6 @@ build/
 Thumbs.db
 __pycache__/
 *.pyc
-.venv/
 target/
 vendor/
 
@@ -29,6 +28,3 @@ htmlcov/
 # FINAL-REPORT.md
 # AUDIT-*.md
 # TEST-RESULTS-*.md
-
-# Cypher query scratch files
-_queries.cypher
