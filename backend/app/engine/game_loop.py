@@ -64,6 +64,8 @@ def _build_game_state(
     game_state: GameStateMachine,
     players: dict[str, Player],
     role_assignments: dict[str, str],
+    night_results: str = "No night results yet.",
+    voting_history: dict[int, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Return the game state visible to agents (public info only)."""
     alive_ids = game_state.alive_players
@@ -87,6 +89,8 @@ def _build_game_state(
             if hasattr(game_state.current_phase, "value")
             else str(game_state.current_phase)
         ),
+        "night_results": night_results,
+        "voting_history": voting_history or {},
     }
 
 
@@ -115,6 +119,10 @@ async def _record_turn(
     response: AgentResponse,
     *,
     vote_target_id: uuid.UUID | None = None,
+    is_default_response: bool = False,
+    token_count_input: int = 0,
+    token_count_output: int = 0,
+    latency_ms: int = 0,
 ) -> Turn:
     turn = Turn(
         id=uuid.uuid4(),
@@ -131,10 +139,10 @@ async def _record_turn(
         technique_self_label=response.technique_self_label,
         deception_self_label=response.deception_self_label,
         confidence=response.confidence,
-        is_default_response=False,
-        token_count_input=0,
-        token_count_output=0,
-        latency_ms=0,
+        is_default_response=is_default_response,
+        token_count_input=token_count_input,
+        token_count_output=token_count_output,
+        latency_ms=latency_ms,
         created_at=datetime.now(timezone.utc),
     )
     db.add(turn)
@@ -251,8 +259,13 @@ async def run_game(
         agent = agent_map[pid]
         state = _build_agent_state(base_state, pid, role_assignments[pid], role_assignments)
         resp = await agent.campaign(state)
+        _meta = getattr(agent, "last_turn_metadata", None)
         await _record_turn(
             db_session, game.id, uuid.UUID(pid), 0, "mayor_campaign", resp,
+            is_default_response=getattr(_meta, "is_default_response", False),
+            token_count_input=getattr(_meta, "token_count_input", 0),
+            token_count_output=getattr(_meta, "token_count_output", 0),
+            latency_ms=getattr(_meta, "latency_ms", 0),
         )
         total_turn_count += 1
 
@@ -297,6 +310,8 @@ async def run_game(
     # 3. Main game loop (up to max_rounds rounds)
     # ------------------------------------------------------------------
     winner: str | None = None
+    voting_history: dict[int, dict[str, str]] = {}
+    last_night_result: str = "No night results yet."
 
     for round_num in range(1, max_rounds + 1):
         game_state.current_round = round_num
@@ -305,7 +320,11 @@ async def run_game(
         # 3a. NIGHT PHASE
         # ==============================================================
         game_state.transition_to_next_phase()  # -> NIGHT
-        base_state = _build_game_state(game_state, players, role_assignments)
+        base_state = _build_game_state(
+            game_state, players, role_assignments,
+            night_results=last_night_result,
+            voting_history=voting_history,
+        )
 
         wolf_targets: list[str] = []  # BUG 3: collect all wolf choices
         seer_target: str | None = None
@@ -411,6 +430,13 @@ async def run_game(
             wolf_target, seer_target, doctor_target, game_state,
         )
 
+        # Track night results for game state
+        if night_result.kill_successful and night_result.killed_player:
+            killed_name = players[night_result.killed_player].agent_name
+            last_night_result = f"{killed_name} (Player {night_result.killed_player}) was killed during the night."
+        else:
+            last_night_result = "Nobody died last night."
+
         # BUG 2: Store seer results in game_state for agent visibility
         if night_result.seer_result and seer_target:
             game_state.seer_results.append(SeerResult(
@@ -495,7 +521,11 @@ async def run_game(
         previous_mentions: list[str] = []
 
         for turn_idx in range(debate_cap):
-            base_state = _build_game_state(game_state, players, role_assignments)
+            base_state = _build_game_state(
+                game_state, players, role_assignments,
+                night_results=last_night_result,
+                voting_history=voting_history,
+            )
 
             # Collect bids
             bids: dict[str, int] = {}
@@ -528,9 +558,14 @@ async def run_game(
                 role_assignments[speaker_id], role_assignments,
             )
             speech = await agent.speak(state, debate_history)
+            _meta = getattr(agent, "last_turn_metadata", None)
             await _record_turn(
                 db_session, game.id, uuid.UUID(speaker_id), round_num,
                 "day_speech", speech,
+                is_default_response=getattr(_meta, "is_default_response", False),
+                token_count_input=getattr(_meta, "token_count_input", 0),
+                token_count_output=getattr(_meta, "token_count_output", 0),
+                latency_ms=getattr(_meta, "latency_ms", 0),
             )
             total_turn_count += 1
 
@@ -559,7 +594,11 @@ async def run_game(
         # internally without using the state machine's micro-transitions,
         # so transition_to_next_phase() would land on the wrong state.
         game_state.current_phase = GamePhase.VOTE
-        base_state = _build_game_state(game_state, players, role_assignments)
+        base_state = _build_game_state(
+            game_state, players, role_assignments,
+            night_results=last_night_result,
+            voting_history=voting_history,
+        )
 
         vote_map: dict[str, str] = {}
         for pid in list(game_state.alive_players):
@@ -579,14 +618,22 @@ async def run_game(
                 target = valid[0] if valid else pid
             vote_map[pid] = target
 
+            _meta = getattr(agent, "last_turn_metadata", None)
             await _record_turn(
                 db_session, game.id, uuid.UUID(pid), round_num,
                 "vote", vote_resp, vote_target_id=uuid.UUID(target),
+                is_default_response=getattr(_meta, "is_default_response", False),
+                token_count_input=getattr(_meta, "token_count_input", 0),
+                token_count_output=getattr(_meta, "token_count_output", 0),
+                latency_ms=getattr(_meta, "latency_ms", 0),
             )
             total_turn_count += 1
 
         # Tally votes
         vote_result = tally_votes(vote_map, game_state.mayor_id)
+
+        # Record voting history for this round
+        voting_history[round_num] = dict(vote_map)
 
         # BUG 5: Use was_tiebreak from VoteResult for mayor's vote record
         for voter_id, target_id in vote_map.items():
@@ -624,9 +671,14 @@ async def run_game(
                     target = valid[0] if valid else pid
                 revote_map[pid] = target
 
+                _meta = getattr(agent, "last_turn_metadata", None)
                 await _record_turn(
                     db_session, game.id, uuid.UUID(pid), round_num,
                     "revote", vote_resp, vote_target_id=uuid.UUID(target),
+                    is_default_response=getattr(_meta, "is_default_response", False),
+                    token_count_input=getattr(_meta, "token_count_input", 0),
+                    token_count_output=getattr(_meta, "token_count_output", 0),
+                    latency_ms=getattr(_meta, "latency_ms", 0),
                 )
                 total_turn_count += 1
 
@@ -712,7 +764,26 @@ async def run_game(
         )
         if win:
             winner = win
+            # Still update round history before breaking
+            for pid in list(agent_map):
+                ag = agent_map[pid]
+                if hasattr(ag, "update_round_history"):
+                    ag.update_round_history(
+                        round_statements=debate_history,
+                        vote_result=str(vote_result),
+                        eliminated=eliminated_id,
+                    )
             break
+
+        # Feed debate history into each LLM agent's memory manager
+        for pid in list(agent_map):
+            ag = agent_map[pid]
+            if hasattr(ag, "update_round_history"):
+                ag.update_round_history(
+                    round_statements=debate_history,
+                    vote_result=str(vote_result),
+                    eliminated=eliminated_id,
+                )
 
         game.rounds_played = round_num
 
@@ -731,16 +802,52 @@ async def run_game(
 
     game.total_turns = total_turn_count
 
+    # ------------------------------------------------------------------
+    # Task 11: Game degradation tracking
+    # Count turns where is_default_response=True.  If >30% of total
+    # turns used defaults, mark the game as degraded.
+    # ------------------------------------------------------------------
+    await db_session.flush()  # ensure turns are visible for counting
+
+    from sqlalchemy import select as sa_select, func as sa_func
+
+    default_count_result = await db_session.execute(
+        sa_select(sa_func.count())
+        .select_from(Turn)
+        .where(Turn.game_id == game.id, Turn.is_default_response.is_(True))
+    )
+    default_count: int = default_count_result.scalar() or 0
+
+    if total_turn_count > 0:
+        default_rate = default_count / total_turn_count
+        if default_rate > 0.30:
+            game.is_degraded = True
+            logger.warning(
+                "Game %s degraded: %d/%d turns (%.1f%%) used default responses",
+                game.id, default_count, total_turn_count, default_rate * 100,
+            )
+        elif default_count > 0:
+            logger.info(
+                "Game %s: %d/%d turns (%.1f%%) used default responses (below threshold)",
+                game.id, default_count, total_turn_count, default_rate * 100,
+            )
+
     db_session.add(GameEvent(
         id=uuid.uuid4(),
         game_id=game.id,
         round_number=game.rounds_played,
         event_type="game_end",
-        details={"winner": game.winner, "status": game.status},
+        details={
+            "winner": game.winner,
+            "status": game.status,
+            "default_response_count": default_count,
+            "total_turns": total_turn_count,
+            "is_degraded": game.is_degraded,
+        },
         created_at=datetime.now(timezone.utc),
     ))
 
-    # Flush so that the game object is fully populated before return
+    # Final flush so that the game object is fully populated before return
     await db_session.flush()
 
     return game

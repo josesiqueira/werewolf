@@ -5,7 +5,7 @@ Stack: Python 3.12 + FastAPI + SQLAlchemy | Next.js 14 + TypeScript + Tailwind |
 
 | Phase | Status | Fix cycles | Tests | Commit |
 |-------|--------|------------|-------|--------|
-| 1     | 🔄 IN PROGRESS | 0 | | |
+| 1     | ✅ DONE | 1 | 70 unit | 0becb91 |
 | 2     | ⏳ PENDING | | | |
 | 3     | ⏳ PENDING | | | |
 | 4     | ⏳ PENDING | | | |
